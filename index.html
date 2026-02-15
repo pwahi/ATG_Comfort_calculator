@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ATG Comfort Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #f6f6f6;
+        --ink: #15171a;
+        --muted: #5f6670;
+        --panel: #ffffff;
+        --accent: #1f6feb;
+        --accent-2: #0f172a;
+        --line: #e5e7eb;
+        --shadow: 0 6px 20px rgba(17, 24, 39, 0.08);
+      }
+      body {
+        margin: 0;
+        font-family: "Manrope", sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      header {
+        padding: 28px 32px 8px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0.2px;
+      }
+      header p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid var(--line);
+        color: var(--accent-2);
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .container {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 20px;
+        padding: 20px 32px 40px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+      .panel h2 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--muted);
+      }
+      .control {
+        margin-bottom: 12px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      select, input, button {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        font-size: 14px;
+        background: #fff;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      button {
+        font-weight: 700;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+      button.primary {
+        background: var(--accent);
+        color: white;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(31, 111, 235, 0.25);
+      }
+      button.secondary {
+        background: var(--accent-2);
+        color: white;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+      }
+      button:hover {
+        transform: translateY(-1px);
+      }
+      .status {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .table-wrap {
+        max-height: 320px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th, td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        white-space: nowrap;
+      }
+      th {
+        position: sticky;
+        top: 0;
+        background: #f5f0e8;
+        z-index: 1;
+      }
+      .charts {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+      .metric {
+        background: #fafafa;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px;
+      }
+      .metric h3 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .metric div {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      footer {
+        padding: 0 32px 30px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .soft-card {
+        background: #fafafa;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .divider {
+        height: 1px;
+        background: var(--line);
+        margin: 10px 0;
+      }
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: #fff;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .chip.selected {
+        background: #eaf1ff;
+        border-color: #c7d7ff;
+        color: #1d4ed8;
+      }
+      .toggle-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .toggle-btn {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--muted);
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .toggle-btn.selected {
+        background: #eaf1ff;
+        border-color: #c7d7ff;
+        color: #1d4ed8;
+      }
+      @media (max-width: 980px) {
+        .container {
+          grid-template-columns: 1fr;
+        }
+        .metric-row {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="hero">
+        <h1>ATG Comfort Calculator</h1>
+        <p>Local-only analysis for ATG/ISSO style comfort. Upload a CSV and evaluate by zone.</p>
+      </div>
+      <div class="badge">Local Only • No Server</div>
+    </header>
+
+    <div id="root"></div>
+
+    <footer>
+      Built for local use. If the CSV format changes, update the fixed column detection in the app.
+    </footer>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script type="text/babel">
+      const { useState, useMemo } = React;
+
+      const DEFAULT_BASE_YEAR = 2025;
+      const WEIGHTS = [1.0, 0.8, 0.64, 0.51, 0.41, 0.33, 0.26];
+      const NORM = 0.253;
+
+      function thetaRmDaily(toDaily) {
+        const trm = [];
+        for (let d = 0; d < toDaily.length; d += 1) {
+          if (d < 7) {
+            trm.push(0.0);
+          } else {
+            let total = 0.0;
+            for (let k = 1; k <= 7; k += 1) {
+              total += WEIGHTS[k - 1] * toDaily[d - k];
+            }
+            trm.push(NORM * total);
+          }
+        }
+        return trm;
+      }
+
+      function limitsFromTrmScalar(trm, method, cls) {
+        let c = String(cls).toUpperCase();
+        if (c === "A") c = "B";
+        if (!["B","C","D"].includes(c)) throw new Error("Class must be A/B/C/D");
+
+        const upperW = { B: 24.0, C: 25.0, D: 26.0 };
+        const lowerW = { B: 20.0, C: 19.0, D: 18.0 };
+        const offset = { B: 2.0, C: 3.0, D: 4.0 };
+        const upperSBeta = { B: 26.0, C: 27.0, D: 28.0 };
+
+        const x = Number(trm);
+        const m = String(method).toLowerCase().trim();
+
+        if (x < 10.0) {
+          return [upperW[c], lowerW[c]];
+        }
+
+        const lo = lowerW[c] + 0.2 * (x - 10.0);
+        let up;
+        if (x <= 16.0) {
+          up = 18.8 + 0.33 * x + offset[c];
+        } else {
+          if (m === "beta") {
+            up = upperSBeta[c];
+          } else {
+            up = 18.8 + 0.33 * x + offset[c];
+          }
+        }
+        return [up, lo];
+      }
+
+      function parseNumber(v) {
+        if (v === null || v === undefined) return NaN;
+        const s = String(v).replace(",", ".");
+        const n = Number(s);
+        return Number.isFinite(n) ? n : NaN;
+      }
+
+      function detectColumns(headers) {
+        const hourCol = headers.find(h => h.trim().toLowerCase() === "hour") || "Hour";
+        const externalCol = headers.find(h => h.toLowerCase().includes("external temperature")) || headers.find(h => h.toLowerCase().includes("external")) || "";
+        const zoneCols = headers.filter(h => h.includes("Kantoor"));
+        return { hourCol, externalCol, zoneCols };
+      }
+
+      function App() {
+        const [rawRows, setRawRows] = useState([]);
+        const [headers, setHeaders] = useState([]);
+        const [status, setStatus] = useState("Upload a CSV to begin.");
+        const [method, setMethod] = useState("alpha");
+        const [comfortClass, setComfortClass] = useState("B");
+        const [baseYear, setBaseYear] = useState(DEFAULT_BASE_YEAR);
+        const [occDays, setOccDays] = useState([0,1,2,3,4]);
+        const [startHour, setStartHour] = useState(7);
+        const [endHour, setEndHour] = useState(19);
+        const [selectedZone, setSelectedZone] = useState("");
+        const [summary, setSummary] = useState([]);
+        const [zoneMetrics, setZoneMetrics] = useState(null);
+
+        const { hourCol, externalCol, zoneCols } = useMemo(() => detectColumns(headers), [headers]);
+
+        function handleFile(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = () => {
+            const text = reader.result;
+            const commaCount = (text.match(/,/g) || []).length;
+            const semiCount = (text.match(/;/g) || []).length;
+            const delimiter = semiCount > commaCount ? ";" : ",";
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter });
+            if (parsed.errors.length) {
+              setStatus("CSV parse error. Check delimiter/encoding.");
+              return;
+            }
+            setHeaders(parsed.meta.fields || []);
+            setRawRows(parsed.data || []);
+            setStatus(`Loaded ${parsed.data.length} rows.`);
+          };
+          reader.readAsText(file, "Windows-1252");
+        }
+
+        function compute() {
+          if (!rawRows.length) {
+            setStatus("No data loaded.");
+            return;
+          }
+          if (!externalCol || zoneCols.length === 0) {
+            setStatus("Missing required columns (External Temperature / Kantoor zones).");
+            return;
+          }
+
+          const hourValues = rawRows.map(r => parseNumber(r[hourCol]));
+          const toHourly = rawRows.map(r => parseNumber(r[externalCol]));
+
+          const start = new Date(baseYear, 0, 1, 0, 0, 0);
+          const dates = hourValues.map(h => new Date(start.getTime() + (h - 1) * 3600 * 1000));
+
+          // Daily mean
+          const dailyMap = new Map();
+          dates.forEach((dt, i) => {
+            const key = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString().slice(0,10);
+            const v = toHourly[i];
+            if (!Number.isFinite(v)) return;
+            if (!dailyMap.has(key)) dailyMap.set(key, []);
+            dailyMap.get(key).push(v);
+          });
+          const dayKeys = Array.from(dailyMap.keys()).sort();
+          const toDaily = dayKeys.map(k => {
+            const arr = dailyMap.get(k);
+            const sum = arr.reduce((a,b) => a + b, 0);
+            return sum / arr.length;
+          });
+          const trmDaily = thetaRmDaily(toDaily);
+
+          const trmDailyMap = new Map();
+          dayKeys.forEach((k, idx) => trmDailyMap.set(k, trmDaily[idx]));
+          const trmHourly = dates.map(dt => {
+            const key = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString().slice(0,10);
+            return trmDailyMap.get(key);
+          });
+
+          const occMask = dates.map(dt => {
+            const dow = dt.getDay() === 0 ? 6 : dt.getDay() - 1; // convert to Mon=0..Sun=6
+            const hr = dt.getHours();
+            return occDays.includes(dow) && hr >= startHour && hr < endHour;
+          });
+
+          const N = Math.min(rawRows.length, trmHourly.length, occMask.length);
+          const results = [];
+
+          zoneCols.forEach(z => {
+            const tinAll = rawRows.slice(0, N).map(r => parseNumber(r[z]));
+            const X = [];
+            const Tin = [];
+            for (let i = 0; i < N; i += 1) {
+              const valid = occMask[i] && Number.isFinite(trmHourly[i]) && Number.isFinite(tinAll[i]);
+              if (valid) {
+                X.push(trmHourly[i]);
+                Tin.push(tinAll[i]);
+              }
+            }
+            if (!Tin.length) return;
+            let ok = 0, over = 0, under = 0;
+            for (let i = 0; i < Tin.length; i += 1) {
+              const [U, L] = limitsFromTrmScalar(X[i], method, comfortClass);
+              if (Tin[i] >= L && Tin[i] <= U) ok += 1;
+              else if (Tin[i] > U) over += 1;
+              else under += 1;
+            }
+            const hrs = Tin.length;
+            results.push({
+              zone: z,
+              occupied_hours: hrs,
+              hours_comfortable: ok,
+              hours_above: over,
+              hours_below: under,
+              pct_comfortable: (100 * ok / hrs).toFixed(2),
+              pct_above: (100 * over / hrs).toFixed(2),
+              pct_below: (100 * under / hrs).toFixed(2),
+            });
+          });
+
+          results.sort((a,b) => b.hours_above - a.hours_above);
+          setSummary(results);
+          if (!selectedZone && zoneCols.length) setSelectedZone(zoneCols[0]);
+          setStatus(`Computed ${results.length} zones.`);
+        }
+
+        function computeZonePlot() {
+          if (!selectedZone || !summary.length) return;
+          const hourValues = rawRows.map(r => parseNumber(r[hourCol]));
+          const toHourly = rawRows.map(r => parseNumber(r[externalCol]));
+          const start = new Date(baseYear, 0, 1, 0, 0, 0);
+          const dates = hourValues.map(h => new Date(start.getTime() + (h - 1) * 3600 * 1000));
+
+          // Daily mean
+          const dailyMap = new Map();
+          dates.forEach((dt, i) => {
+            const key = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString().slice(0,10);
+            const v = toHourly[i];
+            if (!Number.isFinite(v)) return;
+            if (!dailyMap.has(key)) dailyMap.set(key, []);
+            dailyMap.get(key).push(v);
+          });
+          const dayKeys = Array.from(dailyMap.keys()).sort();
+          const toDaily = dayKeys.map(k => {
+            const arr = dailyMap.get(k);
+            const sum = arr.reduce((a,b) => a + b, 0);
+            return sum / arr.length;
+          });
+          const trmDaily = thetaRmDaily(toDaily);
+          const trmDailyMap = new Map();
+          dayKeys.forEach((k, idx) => trmDailyMap.set(k, trmDaily[idx]));
+          const trmHourly = dates.map(dt => {
+            const key = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString().slice(0,10);
+            return trmDailyMap.get(key);
+          });
+
+          const occMask = dates.map(dt => {
+            const dow = dt.getDay() === 0 ? 6 : dt.getDay() - 1;
+            const hr = dt.getHours();
+            return occDays.includes(dow) && hr >= startHour && hr < endHour;
+          });
+
+          const N = Math.min(rawRows.length, trmHourly.length, occMask.length);
+          const tinAll = rawRows.slice(0, N).map(r => parseNumber(r[selectedZone]));
+          const X = [];
+          const Tin = [];
+          for (let i = 0; i < N; i += 1) {
+            const valid = occMask[i] && Number.isFinite(trmHourly[i]) && Number.isFinite(tinAll[i]);
+            if (valid) {
+              X.push(trmHourly[i]);
+              Tin.push(tinAll[i]);
+            }
+          }
+          const overX = [], overY = [];
+          const underX = [], underY = [];
+          const okX = [], okY = [];
+
+          let ok = 0, over = 0, under = 0;
+          for (let i = 0; i < Tin.length; i += 1) {
+            const [U, L] = limitsFromTrmScalar(X[i], method, comfortClass);
+            if (Tin[i] >= L && Tin[i] <= U) { ok += 1; okX.push(X[i]); okY.push(Tin[i]); }
+            else if (Tin[i] > U) { over += 1; overX.push(X[i]); overY.push(Tin[i]); }
+            else { under += 1; underX.push(X[i]); underY.push(Tin[i]); }
+          }
+          setZoneMetrics({ ok, over, under, total: Tin.length });
+
+          const xs = [];
+          for (let x = -5; x <= 25; x += 0.1) xs.push(Number(x.toFixed(1)));
+          const curves = (cls) => {
+            const U = xs.map(x => limitsFromTrmScalar(x, method, cls)[0]);
+            const L = xs.map(x => limitsFromTrmScalar(x, method, cls)[1]);
+            return { U, L };
+          };
+          const B = curves("B");
+          const C = curves("C");
+          const D = curves("D");
+
+          const traces = [
+            { x: xs, y: B.U, mode: "lines", name: `θmax ${method} A/B` },
+            { x: xs, y: C.U, mode: "lines", name: `θmax ${method} C` },
+            { x: xs, y: D.U, mode: "lines", name: `θmax ${method} D` },
+            { x: xs, y: B.L, mode: "lines", name: "θmin A/B", line: { dash: "dash" } },
+            { x: xs, y: C.L, mode: "lines", name: "θmin C", line: { dash: "dash" } },
+            { x: xs, y: D.L, mode: "lines", name: "θmin D", line: { dash: "dash" } },
+            { x: okX, y: okY, mode: "markers", name: "Comfortable", marker: { size: 4, color: "rgba(120,120,120,0.35)" } },
+            { x: overX, y: overY, mode: "markers", name: "Overheated", marker: { size: 5, color: "rgba(220,38,38,0.55)" } },
+            { x: underX, y: underY, mode: "markers", name: "Underheated", marker: { size: 5, color: "rgba(37,99,235,0.55)" } },
+          ];
+
+          Plotly.newPlot("zonePlot", traces, {
+            title: {
+              text: `${method.toUpperCase()} – Class ${comfortClass} – Occupied only – ${selectedZone}`,
+              font: { size: 13 },
+              x: 0.02,
+              xanchor: "left",
+            },
+            xaxis: { title: "running mean outdoor temperature θrm [°C]", range: [-5, 25] },
+            yaxis: { title: "operative indoor temperature θop [°C]", range: [15, 35] },
+            margin: { t: 40, r: 20, b: 50, l: 60 },
+            legend: { orientation: "v", x: 1.02, y: 1, font: { size: 10 } },
+          }, { responsive: true });
+        }
+
+        function exportExcel() {
+          if (!summary.length) return;
+          const rows = summary.map(r => ({
+            zone: r.zone,
+            occupied_hours: r.occupied_hours,
+            hours_comfortable: r.hours_comfortable,
+            hours_above: r.hours_above,
+            hours_below: r.hours_below,
+            pct_comfortable: r.pct_comfortable,
+            pct_above: r.pct_above,
+            pct_below: r.pct_below,
+          }));
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "summary");
+          XLSX.writeFile(wb, `comfort_summary_${method}_class_${comfortClass}.xlsx`);
+        }
+
+        React.useEffect(() => {
+          if (summary.length && selectedZone) {
+            computeZonePlot();
+          }
+        }, [summary, selectedZone, method, comfortClass, baseYear, occDays, startHour, endHour]);
+
+        return (
+          <div className="container">
+            <div className="panel">
+              <h2>Inputs</h2>
+              <div className="control">
+                <label>CSV File</label>
+                <input type="file" accept=".csv" onChange={handleFile} />
+              </div>
+              <div className="soft-card status">{status}</div>
+              <div className="soft-card" style={{ marginTop: "8px" }}>
+                <div><strong>Detected columns:</strong></div>
+                <div>Hour: {hourCol || "?"}</div>
+                <div>External: {externalCol || "?"}</div>
+                <div>Zones: {zoneCols.length}</div>
+              </div>
+
+              <div className="control">
+                <label>Method</label>
+                <select value={method} onChange={e => setMethod(e.target.value)}>
+                  <option value="alpha">Alpha</option>
+                  <option value="beta">Beta</option>
+                </select>
+              </div>
+              <div className="control">
+                <label>Comfort Class</label>
+                <select value={comfortClass} onChange={e => setComfortClass(e.target.value)}>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
+                </select>
+              </div>
+              <div className="control">
+                <label>Base Year</label>
+                <input type="number" value={baseYear} onChange={e => setBaseYear(Number(e.target.value))} />
+              </div>
+              <div className="control">
+                <label>Occupancy Days</label>
+                <div className="toggle-row">
+                  <button
+                    type="button"
+                    className={`toggle-btn ${[0,1,2,3,4].every(d => occDays.includes(d)) && occDays.length === 5 ? "selected" : ""}`}
+                    onClick={() => setOccDays([0,1,2,3,4])}
+                  >
+                    Weekdays
+                  </button>
+                  <button
+                    type="button"
+                    className={`toggle-btn ${[5,6].every(d => occDays.includes(d)) && occDays.length === 2 ? "selected" : ""}`}
+                    onClick={() => setOccDays([5,6])}
+                  >
+                    Weekends
+                  </button>
+                </div>
+                <div className="chip-row" style={{ marginTop: "8px" }}>
+                  {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d, idx) => (
+                    <button
+                      type="button"
+                      className={`chip ${occDays.includes(idx) ? "selected" : ""}`}
+                      key={d}
+                      onClick={() => {
+                        const next = occDays.includes(idx)
+                          ? occDays.filter(x => x !== idx)
+                          : [...occDays, idx].sort((a,b) => a-b);
+                        setOccDays(next);
+                      }}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="control row">
+                <div>
+                  <label>Start Hour</label>
+                  <input type="number" min="0" max="23" value={startHour} onChange={e => setStartHour(Number(e.target.value))} />
+                </div>
+                <div>
+                  <label>End Hour (exclusive)</label>
+                  <input type="number" min="1" max="24" value={endHour} onChange={e => setEndHour(Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="control">
+                <button className="primary" onClick={compute}>Run Analysis</button>
+              </div>
+              <div className="control">
+                <button className="secondary" onClick={exportExcel}>Export Summary (Excel)</button>
+              </div>
+            </div>
+
+            <div className="panel">
+              <h2>Results</h2>
+              <div className="control">
+                <label>Zone</label>
+                <select value={selectedZone} onChange={e => setSelectedZone(e.target.value)}>
+                  {zoneCols.map(z => <option key={z} value={z}>{z}</option>)}
+                </select>
+              </div>
+
+              {zoneMetrics && (
+                <div className="metric-row">
+                  <div className="metric"><h3>Total occupied</h3><div>{zoneMetrics.total}</div></div>
+                  <div className="metric"><h3>Comfortable</h3><div>{zoneMetrics.ok}</div></div>
+                  <div className="metric"><h3>Above</h3><div>{zoneMetrics.over}</div></div>
+                  <div className="metric"><h3>Below</h3><div>{zoneMetrics.under}</div></div>
+                </div>
+              )}
+
+              <div className="charts" style={{ marginTop: "12px" }}>
+                <div id="zonePlot" style={{ height: "520px" }}></div>
+              </div>
+
+              <div className="divider"></div>
+              <h2 style={{ marginTop: "6px" }}>Summary (All Zones)</h2>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Zone</th>
+                      <th>Occupied</th>
+                      <th>Comfortable</th>
+                      <th>Above</th>
+                      <th>Below</th>
+                      <th>% Comfort</th>
+                      <th>% Above</th>
+                      <th>% Below</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.map(r => (
+                      <tr key={r.zone}>
+                        <td>{r.zone}</td>
+                        <td>{r.occupied_hours}</td>
+                        <td>{r.hours_comfortable}</td>
+                        <td>{r.hours_above}</td>
+                        <td>{r.hours_below}</td>
+                        <td>{r.pct_comfortable}</td>
+                        <td>{r.pct_above}</td>
+                        <td>{r.pct_below}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
