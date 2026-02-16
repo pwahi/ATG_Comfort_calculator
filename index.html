@@ -325,7 +325,7 @@
       function detectColumns(headers) {
         const hourCol = headers.find(h => h.trim().toLowerCase() === "hour") || "Hour";
         const externalCol = headers.find(h => h.toLowerCase().includes("external temperature")) || headers.find(h => h.toLowerCase().includes("external")) || "";
-        const zoneCols = headers.filter(h => h.includes("Kantoor"));
+        const zoneCols = headers.filter(h => h.includes("Resultant Temp"));
         return { hourCol, externalCol, zoneCols };
       }
 
@@ -342,6 +342,17 @@
         const [selectedZone, setSelectedZone] = useState("");
         const [summary, setSummary] = useState([]);
         const [zoneMetrics, setZoneMetrics] = useState(null);
+        const [prepared, setPrepared] = useState(null);
+        const [loadScope, setLoadScope] = useState("building");
+        const [areaByHeader, setAreaByHeader] = useState({});
+        const [activeTab, setActiveTab] = useState("comfort");
+        const [zoneGroup, setZoneGroup] = useState("Kantoor");
+        const [comfortGroup, setComfortGroup] = useState("All");
+        const [selectedLoadZone, setSelectedLoadZone] = useState("");
+        const [zoneGroups, setZoneGroups] = useState([]);
+        const [loadMetrics, setLoadMetrics] = useState(null);
+        const [copHeat, setCopHeat] = useState(1);
+        const [copCool, setCopCool] = useState(1);
 
         const { hourCol, externalCol, zoneCols } = useMemo(() => detectColumns(headers), [headers]);
 
@@ -355,14 +366,45 @@
             const commaCount = (text.match(/,/g) || []).length;
             const semiCount = (text.match(/;/g) || []).length;
             const delimiter = semiCount > commaCount ? ";" : ",";
-            const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, delimiter });
+            const parsed = Papa.parse(text, { header: false, skipEmptyLines: true, delimiter });
             if (parsed.errors.length) {
               setStatus("CSV parse error. Check delimiter/encoding.");
               return;
             }
-            setHeaders(parsed.meta.fields || []);
-            setRawRows(parsed.data || []);
-            setStatus(`Loaded ${parsed.data.length} rows.`);
+            const rows = parsed.data || [];
+            const lower = (v) => String(v || "").toLowerCase();
+            const headerRowIndex = rows.findIndex(r =>
+              r.some(c => lower(c).includes("hour")) &&
+              r.some(c => lower(c).includes("external temperature"))
+            );
+            if (headerRowIndex < 0) {
+              setStatus("Could not detect header row. Ensure the CSV contains 'Hour' and 'External Temperature'.");
+              return;
+            }
+            const headerRow = rows[headerRowIndex].map(h => String(h || "").trim());
+            const areaRowIndex = rows.findIndex(r => String(r[0] || "").toLowerCase().includes("zone floor area"));
+            const areaRow = areaRowIndex >= 0 ? rows[areaRowIndex] : null;
+            const areaMap = {};
+            if (areaRow) {
+              headerRow.forEach((h, i) => {
+                const val = parseNumber(areaRow[i]);
+                if (Number.isFinite(val)) areaMap[h] = val;
+              });
+            }
+            const dataRows = rows.slice(headerRowIndex + 1);
+
+            const objects = dataRows
+              .filter(r => r.length && String(r[0] || "").trim() !== "")
+              .map(r => {
+                const obj = {};
+                headerRow.forEach((h, i) => { obj[h] = r[i]; });
+                return obj;
+              });
+
+            setHeaders(headerRow);
+            setRawRows(objects);
+            setAreaByHeader(areaMap);
+            setStatus(`Loaded ${objects.length} rows (header row at index ${headerRowIndex}).`);
           };
           reader.readAsText(file, "Windows-1252");
         }
@@ -416,6 +458,65 @@
           const N = Math.min(rawRows.length, trmHourly.length, occMask.length);
           const results = [];
 
+          const zoneMap = {};
+          headers.forEach(h => {
+            const mTemp = h.match(/^(.*)\s+Resultant Temp/i);
+            const mHeat = h.match(/^(.*)\s+Heating Load/i);
+            const mCool = h.match(/^(.*)\s+Cooling Load/i);
+            const mLight = h.match(/^(.*)\s+Lighting Gain/i);
+            const mEquip = h.match(/^(.*)\s+Equipment Gain/i);
+            const mEquipS = h.match(/^(.*)\s+Equipment Sensible Gain/i);
+            if (mTemp) {
+              const key = mTemp[1].trim();
+              zoneMap[key] = zoneMap[key] || {};
+              zoneMap[key].tempCol = h;
+            }
+            if (mHeat) {
+              const key = mHeat[1].trim();
+              zoneMap[key] = zoneMap[key] || {};
+              zoneMap[key].heatCol = h;
+            }
+            if (mCool) {
+              const key = mCool[1].trim();
+              zoneMap[key] = zoneMap[key] || {};
+              zoneMap[key].coolCol = h;
+            }
+            if (mLight) {
+              const key = mLight[1].trim();
+              zoneMap[key] = zoneMap[key] || {};
+              zoneMap[key].lightCol = h;
+            }
+            if (mEquip) {
+              const key = mEquip[1].trim();
+              zoneMap[key] = zoneMap[key] || {};
+              zoneMap[key].equipCol = h;
+            }
+            if (mEquipS) {
+              const key = mEquipS[1].trim();
+              zoneMap[key] = zoneMap[key] || {};
+              zoneMap[key].equipSCol = h;
+            }
+          });
+
+          const areaByZone = {};
+          headers.forEach((h) => {
+            const val = parseNumber(areaByHeader[h]);
+            if (Number.isFinite(val)) {
+              const mTemp = h.match(/^(.*)\s+Resultant Temp/i);
+              if (mTemp) areaByZone[mTemp[1].trim()] = val;
+            }
+          });
+
+          const groupName = (z) => {
+            const m = z.match(/^(.*?)(?:\s+\d+)?$/);
+            return (m ? m[1] : z).trim();
+          };
+          const loadZones = Object.keys(zoneMap);
+          const groups = Array.from(new Set(loadZones.map(groupName))).sort();
+          setZoneGroups(groups);
+          if (!zoneGroup && groups.length) setZoneGroup(groups[0]);
+          if (!comfortGroup) setComfortGroup("All");
+
           zoneCols.forEach(z => {
             const tinAll = rawRows.slice(0, N).map(r => parseNumber(r[z]));
             const X = [];
@@ -451,104 +552,214 @@
           results.sort((a,b) => b.hours_above - a.hours_above);
           setSummary(results);
           if (!selectedZone && zoneCols.length) setSelectedZone(zoneCols[0]);
+          const zoneKeys = Object.keys(zoneMap);
+          if (!selectedLoadZone && zoneKeys.length) setSelectedLoadZone(zoneKeys[0]);
+          setPrepared({
+            dates,
+            trmHourly,
+            occMask,
+            zoneMap,
+            areaByZone,
+            hourValues,
+            externalCol,
+          });
           setStatus(`Computed ${results.length} zones.`);
         }
 
         function computeZonePlot() {
-          if (!selectedZone || !summary.length) return;
-          const hourValues = rawRows.map(r => parseNumber(r[hourCol]));
-          const toHourly = rawRows.map(r => parseNumber(r[externalCol]));
-          const start = new Date(baseYear, 0, 1, 0, 0, 0);
-          const dates = hourValues.map(h => new Date(start.getTime() + (h - 1) * 3600 * 1000));
-
-          // Daily mean
-          const dailyMap = new Map();
-          dates.forEach((dt, i) => {
-            const key = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString().slice(0,10);
-            const v = toHourly[i];
-            if (!Number.isFinite(v)) return;
-            if (!dailyMap.has(key)) dailyMap.set(key, []);
-            dailyMap.get(key).push(v);
-          });
-          const dayKeys = Array.from(dailyMap.keys()).sort();
-          const toDaily = dayKeys.map(k => {
-            const arr = dailyMap.get(k);
-            const sum = arr.reduce((a,b) => a + b, 0);
-            return sum / arr.length;
-          });
-          const trmDaily = thetaRmDaily(toDaily);
-          const trmDailyMap = new Map();
-          dayKeys.forEach((k, idx) => trmDailyMap.set(k, trmDaily[idx]));
-          const trmHourly = dates.map(dt => {
-            const key = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).toISOString().slice(0,10);
-            return trmDailyMap.get(key);
-          });
-
-          const occMask = dates.map(dt => {
-            const dow = dt.getDay() === 0 ? 6 : dt.getDay() - 1;
-            const hr = dt.getHours();
-            return occDays.includes(dow) && hr >= startHour && hr < endHour;
-          });
-
+          if (!summary.length || !prepared) return;
+          const { dates, trmHourly, occMask } = prepared;
           const N = Math.min(rawRows.length, trmHourly.length, occMask.length);
-          const tinAll = rawRows.slice(0, N).map(r => parseNumber(r[selectedZone]));
-          const X = [];
-          const Tin = [];
-          for (let i = 0; i < N; i += 1) {
-            const valid = occMask[i] && Number.isFinite(trmHourly[i]) && Number.isFinite(tinAll[i]);
-            if (valid) {
-              X.push(trmHourly[i]);
-              Tin.push(tinAll[i]);
+
+          if (activeTab === "comfort" && selectedZone && document.getElementById("zonePlot")) {
+            const tinAll = rawRows.slice(0, N).map(r => parseNumber(r[selectedZone]));
+            const X = [];
+            const Tin = [];
+            for (let i = 0; i < N; i += 1) {
+              const valid = occMask[i] && Number.isFinite(trmHourly[i]) && Number.isFinite(tinAll[i]);
+              if (valid) {
+                X.push(trmHourly[i]);
+                Tin.push(tinAll[i]);
+              }
             }
+            const overX = [], overY = [];
+            const underX = [], underY = [];
+            const okX = [], okY = [];
+
+            let ok = 0, over = 0, under = 0;
+            for (let i = 0; i < Tin.length; i += 1) {
+              const [U, L] = limitsFromTrmScalar(X[i], method, comfortClass);
+              if (Tin[i] >= L && Tin[i] <= U) { ok += 1; okX.push(X[i]); okY.push(Tin[i]); }
+              else if (Tin[i] > U) { over += 1; overX.push(X[i]); overY.push(Tin[i]); }
+              else { under += 1; underX.push(X[i]); underY.push(Tin[i]); }
+            }
+            setZoneMetrics({ ok, over, under, total: Tin.length });
+
+            const xs = [];
+            for (let x = -5; x <= 25; x += 0.1) xs.push(Number(x.toFixed(1)));
+            const curves = (cls) => {
+              const U = xs.map(x => limitsFromTrmScalar(x, method, cls)[0]);
+              const L = xs.map(x => limitsFromTrmScalar(x, method, cls)[1]);
+              return { U, L };
+            };
+            const B = curves("B");
+            const C = curves("C");
+            const D = curves("D");
+
+            const traces = [
+              { x: xs, y: B.U, mode: "lines", name: `θmax ${method} A/B` },
+              { x: xs, y: C.U, mode: "lines", name: `θmax ${method} C` },
+              { x: xs, y: D.U, mode: "lines", name: `θmax ${method} D` },
+              { x: xs, y: B.L, mode: "lines", name: "θmin A/B", line: { dash: "dash" } },
+              { x: xs, y: C.L, mode: "lines", name: "θmin C", line: { dash: "dash" } },
+              { x: xs, y: D.L, mode: "lines", name: "θmin D", line: { dash: "dash" } },
+              { x: okX, y: okY, mode: "markers", name: "Comfortable", marker: { size: 4, color: "rgba(120,120,120,0.35)" } },
+              { x: overX, y: overY, mode: "markers", name: "Overheated", marker: { size: 5, color: "rgba(220,38,38,0.55)" } },
+              { x: underX, y: underY, mode: "markers", name: "Underheated", marker: { size: 5, color: "rgba(37,99,235,0.55)" } },
+            ];
+
+            Plotly.newPlot("zonePlot", traces, {
+              title: {
+                text: `${method.toUpperCase()} – Class ${comfortClass} – Occupied only – ${selectedZone}`,
+                font: { size: 13 },
+                x: 0.02,
+                xanchor: "left",
+              },
+              xaxis: { title: "running mean outdoor temperature θrm [°C]", range: [-5, 25] },
+              yaxis: { title: "operative indoor temperature θop [°C]", range: [15, 35] },
+              margin: { t: 40, r: 20, b: 50, l: 60 },
+              legend: { orientation: "v", x: 1.02, y: 1, font: { size: 10 } },
+            }, { responsive: true });
           }
-          const overX = [], overY = [];
-          const underX = [], underY = [];
-          const okX = [], okY = [];
 
-          let ok = 0, over = 0, under = 0;
-          for (let i = 0; i < Tin.length; i += 1) {
-            const [U, L] = limitsFromTrmScalar(X[i], method, comfortClass);
-            if (Tin[i] >= L && Tin[i] <= U) { ok += 1; okX.push(X[i]); okY.push(Tin[i]); }
-            else if (Tin[i] > U) { over += 1; overX.push(X[i]); overY.push(Tin[i]); }
-            else { under += 1; underX.push(X[i]); underY.push(Tin[i]); }
+          if (activeTab !== "loads" || !document.getElementById("loadPlot")) return;
+          const loadZones = Object.keys(prepared.zoneMap || {});
+          const groupZones = loadZones.filter(z => {
+            const m = z.match(/^(.*?)(?:\s+\d+)?$/);
+            const g = (m ? m[1] : z).trim().toLowerCase();
+            return g === zoneGroup.toLowerCase();
+          });
+          let chosenZones = [];
+          if (loadScope === "building") chosenZones = loadZones;
+          else if (loadScope === "group") chosenZones = groupZones;
+          else if (loadScope === "zone" && selectedLoadZone) chosenZones = [selectedLoadZone];
+
+          const totalArea = chosenZones.reduce((a,z) => a + (prepared.areaByZone[z] || 0), 0);
+          const heatSeries = [];
+          const coolSeries = [];
+          const lightSeries = [];
+          const equipSeries = [];
+          let heatWh = 0;
+          let coolWh = 0;
+          let lightWh = 0;
+          let equipWh = 0;
+          for (let i = 0; i < N; i += 1) {
+            let heat = 0;
+            let cool = 0;
+            let light = 0;
+            let equip = 0;
+            chosenZones.forEach(z => {
+              const zm = prepared.zoneMap[z];
+              if (!zm) return;
+              const hv = parseNumber(rawRows[i][zm.heatCol]);
+              const cv = parseNumber(rawRows[i][zm.coolCol]);
+              const lv = parseNumber(rawRows[i][zm.lightCol]);
+              const ev = parseNumber(rawRows[i][zm.equipCol]);
+              const esv = parseNumber(rawRows[i][zm.equipSCol]);
+              if (Number.isFinite(hv)) heat += hv;
+              if (Number.isFinite(cv)) cool += cv;
+              if (Number.isFinite(lv)) light += lv;
+              if (Number.isFinite(ev)) equip += ev;
+              if (Number.isFinite(esv)) equip += esv;
+            });
+            const hCop = copHeat && copHeat > 0 ? copHeat : 1;
+            const cCop = copCool && copCool > 0 ? copCool : 1;
+            heat = heat / hCop;
+            cool = cool / cCop;
+            const denom = totalArea > 0 ? totalArea : 1;
+            heatSeries.push(heat / denom);
+            coolSeries.push(cool / denom);
+            // lighting/equipment are gains, keep positive
+            lightSeries.push(light / denom);
+            equipSeries.push(equip / denom);
+            heatWh += heat;
+            coolWh += Math.abs(cool);
+            lightWh += light;
+            equipWh += equip;
           }
-          setZoneMetrics({ ok, over, under, total: Tin.length });
 
-          const xs = [];
-          for (let x = -5; x <= 25; x += 0.1) xs.push(Number(x.toFixed(1)));
-          const curves = (cls) => {
-            const U = xs.map(x => limitsFromTrmScalar(x, method, cls)[0]);
-            const L = xs.map(x => limitsFromTrmScalar(x, method, cls)[1]);
-            return { U, L };
-          };
-          const B = curves("B");
-          const C = curves("C");
-          const D = curves("D");
+          const years = Array.from(new Set(dates.slice(0, N).map(d => d.getFullYear())));
+          const byYear = {};
+          years.forEach(y => { byYear[y] = { heatWh: 0, coolWh: 0, lightWh: 0, equipWh: 0 }; });
+          for (let i = 0; i < N; i += 1) {
+            const y = dates[i].getFullYear();
+            const zmSum = chosenZones.reduce((acc, z) => {
+              const zm = prepared.zoneMap[z];
+              if (!zm) return acc;
+              const hv = parseNumber(rawRows[i][zm.heatCol]);
+              const cv = parseNumber(rawRows[i][zm.coolCol]);
+              const lv = parseNumber(rawRows[i][zm.lightCol]);
+              const ev = parseNumber(rawRows[i][zm.equipCol]);
+              const esv = parseNumber(rawRows[i][zm.equipSCol]);
+              if (Number.isFinite(hv)) acc.heat += hv;
+              if (Number.isFinite(cv)) acc.cool += Math.abs(cv);
+              if (Number.isFinite(lv)) acc.light += lv;
+              if (Number.isFinite(ev)) acc.equip += ev;
+              if (Number.isFinite(esv)) acc.equip += esv;
+              return acc;
+            }, { heat: 0, cool: 0, light: 0, equip: 0 });
+            const hCop = copHeat && copHeat > 0 ? copHeat : 1;
+            const cCop = copCool && copCool > 0 ? copCool : 1;
+            zmSum.heat = zmSum.heat / hCop;
+            zmSum.cool = zmSum.cool / cCop;
+            byYear[y].heatWh += zmSum.heat;
+            byYear[y].coolWh += zmSum.cool;
+            byYear[y].lightWh += zmSum.light;
+            byYear[y].equipWh += zmSum.equip;
+          }
 
-          const traces = [
-            { x: xs, y: B.U, mode: "lines", name: `θmax ${method} A/B` },
-            { x: xs, y: C.U, mode: "lines", name: `θmax ${method} C` },
-            { x: xs, y: D.U, mode: "lines", name: `θmax ${method} D` },
-            { x: xs, y: B.L, mode: "lines", name: "θmin A/B", line: { dash: "dash" } },
-            { x: xs, y: C.L, mode: "lines", name: "θmin C", line: { dash: "dash" } },
-            { x: xs, y: D.L, mode: "lines", name: "θmin D", line: { dash: "dash" } },
-            { x: okX, y: okY, mode: "markers", name: "Comfortable", marker: { size: 4, color: "rgba(120,120,120,0.35)" } },
-            { x: overX, y: overY, mode: "markers", name: "Overheated", marker: { size: 5, color: "rgba(220,38,38,0.55)" } },
-            { x: underX, y: underY, mode: "markers", name: "Underheated", marker: { size: 5, color: "rgba(37,99,235,0.55)" } },
-          ];
+          const kwhPerM2Heat = totalArea > 0 ? (heatWh / 1000 / totalArea) : 0;
+          const kwhPerM2Cool = totalArea > 0 ? (coolWh / 1000 / totalArea) : 0;
+          const kwhPerM2Light = totalArea > 0 ? (lightWh / 1000 / totalArea) : 0;
+          const kwhPerM2Equip = totalArea > 0 ? (equipWh / 1000 / totalArea) : 0;
+          const kwhPerM2Total = kwhPerM2Heat + kwhPerM2Cool + kwhPerM2Light + kwhPerM2Equip;
+          setLoadMetrics({
+            totalArea,
+            kwhPerM2Heat: kwhPerM2Heat.toFixed(2),
+            kwhPerM2Cool: kwhPerM2Cool.toFixed(2),
+            kwhPerM2Light: kwhPerM2Light.toFixed(2),
+            kwhPerM2Equip: kwhPerM2Equip.toFixed(2),
+            kwhPerM2Total: kwhPerM2Total.toFixed(2),
+            byYear,
+          });
 
-          Plotly.newPlot("zonePlot", traces, {
-            title: {
-              text: `${method.toUpperCase()} – Class ${comfortClass} – Occupied only – ${selectedZone}`,
-              font: { size: 13 },
-              x: 0.02,
-              xanchor: "left",
-            },
-            xaxis: { title: "running mean outdoor temperature θrm [°C]", range: [-5, 25] },
-            yaxis: { title: "operative indoor temperature θop [°C]", range: [15, 35] },
+          Plotly.newPlot("loadPlot", [
+            { x: dates.slice(0, N), y: heatSeries, mode: "lines", name: "Heating (W/m²)", line: { color: "rgba(220,38,38,0.85)" } },
+            { x: dates.slice(0, N), y: coolSeries.map(v => -v), mode: "lines", name: "Cooling (W/m²)", line: { color: "rgba(37,99,235,0.85)" } },
+            { x: dates.slice(0, N), y: lightSeries, mode: "lines", name: "Lighting (W/m²)", line: { color: "rgba(234,179,8,0.85)" } },
+            { x: dates.slice(0, N), y: equipSeries, mode: "lines", name: "Equipment (W/m²)", line: { color: "rgba(99,102,241,0.85)" } },
+          ], {
+            title: { text: `Load Intensity — ${loadScope === "building" ? "Total Building" : loadScope === "group" ? zoneGroup : selectedLoadZone || ""}`, font: { size: 13 }, x: 0.02, xanchor: "left" },
+            yaxis: { title: "W/m²" },
+            xaxis: { title: "Time" },
             margin: { t: 40, r: 20, b: 50, l: 60 },
             legend: { orientation: "v", x: 1.02, y: 1, font: { size: 10 } },
           }, { responsive: true });
+
+          if (document.getElementById("loadBreakdown")) {
+          Plotly.newPlot("loadBreakdown", [
+            { type: "bar", x: ["Heating"], y: [kwhPerM2Heat], name: "Heating", marker: { color: "rgba(220,38,38,0.85)" } },
+            { type: "bar", x: ["Cooling"], y: [kwhPerM2Cool], name: "Cooling", marker: { color: "rgba(37,99,235,0.85)" } },
+            { type: "bar", x: ["Lighting"], y: [kwhPerM2Light], name: "Lighting", marker: { color: "rgba(234,179,8,0.85)" } },
+            { type: "bar", x: ["Equipment"], y: [kwhPerM2Equip], name: "Equipment", marker: { color: "rgba(99,102,241,0.85)" } },
+            { type: "bar", x: ["Total"], y: [(Number(kwhPerM2Heat)+Number(kwhPerM2Cool)+Number(kwhPerM2Light)+Number(kwhPerM2Equip)).toFixed(2)], name: "Total", marker: { color: "rgba(15,23,42,0.85)" } },
+          ], {
+            title: { text: "Load Breakdown (kWh/m²)", font: { size: 13 }, x: 0.02, xanchor: "left" },
+            yaxis: { title: "kWh/m²" },
+            margin: { t: 40, r: 20, b: 50, l: 60 },
+            showlegend: false,
+          }, { responsive: true });
+          }
         }
 
         function exportExcel() {
@@ -563,6 +774,57 @@
             pct_above: r.pct_above,
             pct_below: r.pct_below,
           }));
+          if (prepared) {
+            const N = rawRows.length;
+            const loadRows = Object.keys(prepared.zoneMap || {}).map(z => {
+              const zm = prepared.zoneMap[z];
+              const area = prepared.areaByZone[z] || 0;
+              let heatWh = 0;
+              let coolWh = 0;
+              let lightWh = 0;
+              let equipWh = 0;
+              let peakHeat = 0;
+              let peakCool = 0;
+              for (let i = 0; i < N; i += 1) {
+                const hv = parseNumber(rawRows[i][zm.heatCol]);
+                const cv = parseNumber(rawRows[i][zm.coolCol]);
+                const lv = parseNumber(rawRows[i][zm.lightCol]);
+                const ev = parseNumber(rawRows[i][zm.equipCol]);
+                const esv = parseNumber(rawRows[i][zm.equipSCol]);
+                if (Number.isFinite(hv)) {
+                  heatWh += hv;
+                  if (hv > peakHeat) peakHeat = hv;
+                }
+                if (Number.isFinite(cv)) {
+                  coolWh += Math.abs(cv);
+                  if (Math.abs(cv) > peakCool) peakCool = Math.abs(cv);
+                }
+                if (Number.isFinite(lv)) lightWh += lv;
+                if (Number.isFinite(ev)) equipWh += ev;
+                if (Number.isFinite(esv)) equipWh += esv;
+              }
+              return {
+                zone: z,
+                area_m2: area || "",
+                heating_kWh: (heatWh / 1000).toFixed(2),
+                cooling_kWh: (coolWh / 1000).toFixed(2),
+                lighting_kWh: (lightWh / 1000).toFixed(2),
+                equipment_kWh: (equipWh / 1000).toFixed(2),
+                peak_heating_W: peakHeat.toFixed(2),
+                peak_cooling_W: peakCool.toFixed(2),
+                heating_kWh_per_m2: area ? (heatWh / 1000 / area).toFixed(2) : "",
+                cooling_kWh_per_m2: area ? (coolWh / 1000 / area).toFixed(2) : "",
+                lighting_kWh_per_m2: area ? (lightWh / 1000 / area).toFixed(2) : "",
+                equipment_kWh_per_m2: area ? (equipWh / 1000 / area).toFixed(2) : "",
+              };
+            });
+            const ws2 = XLSX.utils.json_to_sheet(loadRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "comfort_summary");
+            XLSX.utils.book_append_sheet(wb, ws2, "load_summary");
+            XLSX.writeFile(wb, `comfort_summary_${method}_class_${comfortClass}.xlsx`);
+            return;
+          }
           const ws = XLSX.utils.json_to_sheet(rows);
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, "summary");
@@ -570,19 +832,21 @@
         }
 
         React.useEffect(() => {
-          if (summary.length && selectedZone) {
+          if (summary.length) {
             computeZonePlot();
           }
-        }, [summary, selectedZone, method, comfortClass, baseYear, occDays, startHour, endHour]);
+        }, [summary, activeTab, selectedZone, selectedLoadZone, zoneGroup, loadScope, method, comfortClass, baseYear, occDays, startHour, endHour]);
 
         return (
           <div className="container">
             <div className="panel">
               <h2>Inputs</h2>
+
               <div className="control">
                 <label>CSV File</label>
                 <input type="file" accept=".csv" onChange={handleFile} />
               </div>
+
               <div className="soft-card status">{status}</div>
               <div className="soft-card" style={{ marginTop: "8px" }}>
                 <div><strong>Detected columns:</strong></div>
@@ -590,6 +854,8 @@
                 <div>External: {externalCol || "?"}</div>
                 <div>Zones: {zoneCols.length}</div>
               </div>
+
+              <div className="divider"></div>
 
               <div className="control">
                 <label>Method</label>
@@ -667,58 +933,172 @@
 
             <div className="panel">
               <h2>Results</h2>
-              <div className="control">
-                <label>Zone</label>
-                <select value={selectedZone} onChange={e => setSelectedZone(e.target.value)}>
-                  {zoneCols.map(z => <option key={z} value={z}>{z}</option>)}
-                </select>
+              <div className="control toggle-row">
+                <button type="button" className={`toggle-btn ${activeTab === "comfort" ? "selected" : ""}`} onClick={() => setActiveTab("comfort")}>Comfort</button>
+                <button type="button" className={`toggle-btn ${activeTab === "loads" ? "selected" : ""}`} onClick={() => setActiveTab("loads")}>Loads</button>
               </div>
 
-              {zoneMetrics && (
-                <div className="metric-row">
-                  <div className="metric"><h3>Total occupied</h3><div>{zoneMetrics.total}</div></div>
-                  <div className="metric"><h3>Comfortable</h3><div>{zoneMetrics.ok}</div></div>
-                  <div className="metric"><h3>Above</h3><div>{zoneMetrics.over}</div></div>
-                  <div className="metric"><h3>Below</h3><div>{zoneMetrics.under}</div></div>
-                </div>
+              {activeTab === "comfort" && (
+                <>
+                  <div className="control">
+                    <label>Zone Group</label>
+                    <select value={comfortGroup} onChange={e => setComfortGroup(e.target.value)}>
+                      <option value="All">All</option>
+                      {zoneGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div className="control">
+                    <label>Zone</label>
+                    <select value={selectedZone} onChange={e => setSelectedZone(e.target.value)}>
+                      {zoneCols
+                        .filter(z => {
+                          if (comfortGroup === "All") return true;
+                          const m = z.match(/^(.*?)(?:\s+\d+)?\s+Resultant Temp/i);
+                          const g = (m ? m[1] : z).trim();
+                          return g === comfortGroup;
+                        })
+                        .map(z => <option key={z} value={z}>{z}</option>)}
+                    </select>
+                  </div>
+
+                  {zoneMetrics && (
+                    <div className="metric-row">
+                      <div className="metric"><h3>Total occupied</h3><div>{zoneMetrics.total}</div></div>
+                      <div className="metric"><h3>Comfortable</h3><div>{zoneMetrics.ok}</div></div>
+                      <div className="metric"><h3>Above</h3><div>{zoneMetrics.over}</div></div>
+                      <div className="metric"><h3>Below</h3><div>{zoneMetrics.under}</div></div>
+                    </div>
+                  )}
+
+                  <div className="charts" style={{ marginTop: "12px" }}>
+                    <div id="zonePlot" style={{ height: "520px" }}></div>
+                  </div>
+
+                  <div className="divider"></div>
+                  <h2 style={{ marginTop: "6px" }}>Summary (All Zones)</h2>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Zone</th>
+                          <th>Occupied</th>
+                          <th>Comfortable</th>
+                          <th>Above</th>
+                          <th>Below</th>
+                          <th>% Comfort</th>
+                          <th>% Above</th>
+                          <th>% Below</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summary.map(r => (
+                          <tr key={r.zone}>
+                            <td>{r.zone}</td>
+                            <td>{r.occupied_hours}</td>
+                            <td>{r.hours_comfortable}</td>
+                            <td>{r.hours_above}</td>
+                            <td>{r.hours_below}</td>
+                            <td>{r.pct_comfortable}</td>
+                            <td>{r.pct_above}</td>
+                            <td>{r.pct_below}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
 
-              <div className="charts" style={{ marginTop: "12px" }}>
-                <div id="zonePlot" style={{ height: "520px" }}></div>
-              </div>
+              {activeTab === "loads" && (
+                <>
+                  <div className="control row">
+                    <div>
+                      <label>Heating COP</label>
+                      <input type="number" min="0.1" step="0.1" value={copHeat} onChange={e => setCopHeat(Number(e.target.value))} />
+                    </div>
+                    <div>
+                      <label>Cooling COP</label>
+                      <input type="number" min="0.1" step="0.1" value={copCool} onChange={e => setCopCool(Number(e.target.value))} />
+                    </div>
+                  </div>
+                  <div className="control">
+                    <label>Load View</label>
+                    <select value={loadScope} onChange={e => setLoadScope(e.target.value)}>
+                      <option value="building">Total Building</option>
+                      <option value="group">Zone Group</option>
+                      <option value="zone">Single Zone</option>
+                    </select>
+                  </div>
 
-              <div className="divider"></div>
-              <h2 style={{ marginTop: "6px" }}>Summary (All Zones)</h2>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Zone</th>
-                      <th>Occupied</th>
-                      <th>Comfortable</th>
-                      <th>Above</th>
-                      <th>Below</th>
-                      <th>% Comfort</th>
-                      <th>% Above</th>
-                      <th>% Below</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.map(r => (
-                      <tr key={r.zone}>
-                        <td>{r.zone}</td>
-                        <td>{r.occupied_hours}</td>
-                        <td>{r.hours_comfortable}</td>
-                        <td>{r.hours_above}</td>
-                        <td>{r.hours_below}</td>
-                        <td>{r.pct_comfortable}</td>
-                        <td>{r.pct_above}</td>
-                        <td>{r.pct_below}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  {loadScope === "group" && (
+                    <div className="control">
+                      <label>Group</label>
+                      <select value={zoneGroup} onChange={e => setZoneGroup(e.target.value)}>
+                        {zoneGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {loadScope === "zone" && (
+                    <div className="control">
+                      <label>Zone</label>
+                      <select value={selectedLoadZone} onChange={e => setSelectedLoadZone(e.target.value)}>
+                        {Object.keys((prepared && prepared.zoneMap) || {}).map(z => <option key={z} value={z}>{z}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {loadMetrics && (
+                    <div className="metric-row">
+                      <div className="metric"><h3>Total area (m²)</h3><div>{loadMetrics.totalArea.toFixed ? loadMetrics.totalArea.toFixed(2) : loadMetrics.totalArea}</div></div>
+                      <div className="metric"><h3>Heating kWh/m²</h3><div>{loadMetrics.kwhPerM2Heat}</div></div>
+                      <div className="metric"><h3>Cooling kWh/m²</h3><div>{loadMetrics.kwhPerM2Cool}</div></div>
+                      <div className="metric"><h3>Lighting kWh/m²</h3><div>{loadMetrics.kwhPerM2Light}</div></div>
+                      <div className="metric"><h3>Equipment kWh/m²</h3><div>{loadMetrics.kwhPerM2Equip}</div></div>
+                      <div className="metric"><h3>Total kWh/m²</h3><div>{loadMetrics.kwhPerM2Total}</div></div>
+                    </div>
+                  )}
+
+                  <div className="charts" style={{ marginTop: "12px" }}>
+                    <div id="loadPlot" style={{ height: "420px" }}></div>
+                  </div>
+
+                  <div className="charts" style={{ marginTop: "12px" }}>
+                    <div id="loadBreakdown" style={{ height: "320px" }}></div>
+                  </div>
+
+                  {loadMetrics && (
+                    <>
+                      <div className="divider"></div>
+                      <h2 style={{ marginTop: "6px" }}>Yearly Loads (kWh/m²)</h2>
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Year</th>
+                              <th>Heating</th>
+                              <th>Cooling</th>
+                              <th>Lighting</th>
+                              <th>Equipment</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(loadMetrics.byYear || {}).map(([y, v]) => (
+                              <tr key={y}>
+                                <td>{y}</td>
+                                <td>{(loadMetrics.totalArea > 0 ? (v.heatWh / 1000 / loadMetrics.totalArea) : 0).toFixed(2)}</td>
+                                <td>{(loadMetrics.totalArea > 0 ? (v.coolWh / 1000 / loadMetrics.totalArea) : 0).toFixed(2)}</td>
+                                <td>{(loadMetrics.totalArea > 0 ? (v.lightWh / 1000 / loadMetrics.totalArea) : 0).toFixed(2)}</td>
+                                <td>{(loadMetrics.totalArea > 0 ? (v.equipWh / 1000 / loadMetrics.totalArea) : 0).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         );
