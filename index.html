@@ -964,9 +964,18 @@
                   {zoneMetrics && (
                     <div className="metric-row">
                       <div className="metric"><h3>Total occupied</h3><div>{zoneMetrics.total}</div></div>
-                      <div className="metric"><h3>Comfortable</h3><div>{zoneMetrics.ok}</div></div>
-                      <div className="metric"><h3>Above</h3><div>{zoneMetrics.over}</div></div>
-                      <div className="metric"><h3>Below</h3><div>{zoneMetrics.under}</div></div>
+                      <div className="metric">
+                        <h3>Comfortable</h3>
+                        <div>{zoneMetrics.ok} ({zoneMetrics.total ? ((zoneMetrics.ok / zoneMetrics.total) * 100).toFixed(1) : "0.0"}%)</div>
+                      </div>
+                      <div className="metric">
+                        <h3>Above</h3>
+                        <div>{zoneMetrics.over} ({zoneMetrics.total ? ((zoneMetrics.over / zoneMetrics.total) * 100).toFixed(1) : "0.0"}%)</div>
+                      </div>
+                      <div className="metric">
+                        <h3>Below</h3>
+                        <div>{zoneMetrics.under} ({zoneMetrics.total ? ((zoneMetrics.under / zoneMetrics.total) * 100).toFixed(1) : "0.0"}%)</div>
+                      </div>
                     </div>
                   )}
 
